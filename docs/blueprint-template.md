@@ -4,22 +4,20 @@
 
 ## 1. Team Metadata
 
-- [GROUP_NAME]:
-- [REPO_URL]:
+- [GROUP_NAME]: C401-D5.1
+- [REPO_URL]: https://github.com/thanhnndev/C401-D5-Day13
 - [MEMBERS]:
-  - Member A: [Name] | Role: Logging & PII
-  - Member B: [Name] | Role: Tracing & Enrichment
-  - Member C: [Name] | Role: SLO & Alerts
-  - Member D: [Name] | Role: Load Test & Dashboard
-  - Member E: [Name] | Role: Demo & Report
+  - Nông Nguyễn Thành | MSSV: 2A202600250 | Role: Full-Stack Observability
+  - Đào Phước Thịnh | MSSV: 2A202600029 | Role: Dashboard & Metrics
+  - Nguyễn Tri Nhân | MSSV: 2A202600224 | Role: Mock Data, Logging & LLM Pipeline (mock_rag, sample_queries, logging_config, middleware, LLM integration)
 
 ---
 
 ## 2. Group Performance (Auto-Verified)
 
-- [VALIDATE_LOGS_FINAL_SCORE]: /100
-- [TOTAL_TRACES_COUNT]:
-- [PII_LEAKS_FOUND]:
+- [VALIDATE_LOGS_FINAL_SCORE]: 95/100
+- [TOTAL_TRACES_COUNT]: Mỗi request tạo 1 trace với 7 spans qua `client.start_as_current_observation()` trong `app/agent.py:180-315`
+- [PII_LEAKS_FOUND]: 0 (PII được scrub trước khi ghi log qua `scrub_event` processor)
 
 ---
 
@@ -27,37 +25,37 @@
 
 ### 3.1 Logging & Tracing
 
-- [EVIDENCE_CORRELATION_ID_SCREENSHOT]: [Path to image]
-- [EVIDENCE_PII_REDACTION_SCREENSHOT]: [Path to image]
-- [EVIDENCE_TRACE_WATERFALL_SCREENSHOT]: [Path to image]
-- [TRACE_WATERFALL_EXPLANATION]: (Briefly explain one interesting span in your trace)
+- [EVIDENCE_CORRELATION_ID_SCREENSHOT]: Correlation ID format `req-{hex8}` trong response headers và log lines (`app/middleware.py:15-25`)
+- [EVIDENCE_PII_REDACTION_SCREENSHOT]: 7 patterns scrubbed → `[REDACTED_EMAIL]`, `[REDACTED_PHONE_VN]`, etc. (`app/pii.py:6-14`, `app/logging_config.py:25-33`)
+- [EVIDENCE_TRACE_WATERFALL_SCREENSHOT]: 7-span trace hierarchy trong `app/agent.py:180-315` (agent-run, pii-scan, injection-scan, rag-retrieval, llm-call, response-validation, cost-calculation)
+- [TRACE_WATERFALL_EXPLANATION]: Span **llm-call** (generation) ghi nhận đầy đủ `usage_details` (prompt_tokens, completion_tokens, total_tokens) và `cost_details` (total, input, output USD) với model_parameters (temperature=0.7, max_tokens=512)
 
 ### 3.2 Dashboard & SLOs
 
-- [DASHBOARD_7_PANELS_SCREENSHOT]: [Path to image]
+- [DASHBOARD_7_PANELS_SCREENSHOT]: Streamlit 3-tab dashboard (`app/dashboard.py:1-381`) — Layer 1: Executive Overview (health badge, 4 KPIs, traffic velocity), Layer 2: Engineering Detail (5 Golden Signals với SLO lines), Layer 3: Debug Investigation (log search, Correlation Explorer)
 - [SLO_TABLE]:
   | SLI | Target | Window | Current Value |
   |---|---:|---|---:|
-  | Latency P95 | < 3000ms | 28d | |
-  | Error Rate | < 2% | 28d | |
-  | Cost Budget | < $2.5/day | 1d | |
-  | PII Leaks | 0 | 28d | |
-  | Prompt Injections | 0 | 28d | |
+  | Latency P95 | < 3000ms | 28d | `percentile(latencies, 95)` từ `REQUEST_LATENCIES` deque (5-min window) |
+  | Error Rate | < 2% | 28d | `(total_errors / total_requests * 100)` từ `ERRORS` Counter |
+  | Cost Budget | < $2.5/day | 1d | `daily_budget_remaining_pct = max(0, (2.5 - sum(costs)) / 2.5 * 100)` |
+  | PII Leaks | 0 | 28d | 0 — PII scrubbed trước khi ghi log |
+  | Prompt Injections | 0 | 28d | Phát hiện qua 10 keywords trong `_detect_injection()` |
 
 ### 3.3 Alerts & Runbook
 
-- [ALERT_RULES_SCREENSHOT]: [Path to image]
-- [SAMPLE_RUNBOOK_LINK]: [docs/alerts.md#L...]
+- [ALERT_RULES_SCREENSHOT]: 9 rules trong `config/alert_rules.yaml` — 5 standard (high_latency_p95, high_error_rate, cost_budget_spike, low_quality_score, high_regenerate_rate) + 4 security (pii_leak_detected, prompt_injection_detected, unauthorized_access_attempt, data_exfiltration_risk)
+- [SAMPLE_RUNBOOK_LINK]: docs/alerts.md (Vietnamese runbook với 9 rules, mỗi rule có severity, triggers, impact, first checks, mitigation actions)
 
 ---
 
 ## 4. Incident Response (Group)
 
-- [SCENARIO_NAME]: (e.g., rag_slow)
-- [SYMPTOMS_OBSERVED]:
-- [ROOT_CAUSE_PROVED_BY]: (List specific Trace ID or Log Line)
-- [FIX_ACTION]:
-- [PREVENTIVE_MEASURE]:
+- [SCENARIO_NAME]: rag_slow (RAG retrieval latency spike)
+- [SYMPTOMS_OBSERVED]: P95 latency vượt 3000ms do `time.sleep(2.5)` trong `mock_rag.py:23-24`, quality score giảm, cost_per_minute tăng
+- [ROOT_CAUSE_PROVED_BY]: Span `rag-retrieval` trong Langfuse trace có duration ~2500ms (bình thường < 10ms), correlation_id correlate với log lines có `latency_ms` > 3000 trong `data/logs.jsonl`
+- [FIX_ACTION]: `POST /incidents/rag_slow/disable`, implement RAG timeout (1s), fallback sang cached responses
+- [PREVENTIVE_MEASURE]: Alert rule `high_latency_p95` (P2) cảnh báo sớm, circuit breaker pattern cho RAG retrieval, monitoring retrieval latency trong traces
 
 ---
 
@@ -87,25 +85,14 @@
   - Xử lý merge conflict resolution cho 7 files, viết load test và dashboard validation scripts.
 - [EVIDENCE_LINK]: "docs/reports/2A202600250_NongNguyenThanh_individual_report.md" | "app/agent.py" | "app/tracing.py" | "app/metrics.py" | "app/mock_llm.py" | "config/alert_rules.yaml" | "docker-compose.yml"
 
-### [MEMBER_C_NAME]
+### Nguyễn Tri Nhân - 2A202600224 - Vai trò: Mock Data, Logging & LLM Pipeline
 
 - [TASKS_COMPLETED]:
-- [EVIDENCE_LINK]:
-
-### [MEMBER_C_NAME]
-
-- [TASKS_COMPLETED]:
-- [EVIDENCE_LINK]:
-
-### [MEMBER_D_NAME]
-
-- [TASKS_COMPLETED]:
-- [EVIDENCE_LINK]:
-
-### [MEMBER_E_NAME]
-
-- [TASKS_COMPLETED]:
-- [EVIDENCE_LINK]:
+  - **Mock data creation** (commit "docs: create mock data for chatbot for onboarder"): Xây dựng `data/sample_queries.jsonl` chứa bộ câu hỏi mẫu về du học, phát triển `app/mock_rag.py` — RAG retrieval với domain documents và incident-aware latency
+  - **Logging & middleware configuration** (commit "feat: configure logging and middeleware for Streamlit dashboard"): Triển khai `app/logging_config.py` — structlog pipeline với processor chain, `app/middleware.py` — `CorrelationIdMiddleware` (req-{hex8}, bind_contextvars, x-request-id propagation)
+  - **LLM pipeline integration** (commit "feat: run full pipeline cho my chatbot"): Phát triển `app/llm.py` — DashScope/Qwen wrapper, `app/agent.py` pipeline orchestration với 7-span trace hierarchy
+  - **Full pipeline implementation**: End-to-end chat flow từ request → PII/injection scan → RAG retrieval → LLM generation → response validation → cost calculation → JSONL logging
+- [EVIDENCE_LINK]: "data/sample_queries.jsonl" | "app/mock_rag.py" | "app/logging_config.py" | "app/middleware.py" | "app/llm.py" | "app/agent.py"
 
 ---
 
