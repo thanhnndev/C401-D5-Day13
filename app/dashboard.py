@@ -126,6 +126,8 @@ if df_all.empty:
     st.error("No logs found. Ensure the system is running and generating logs.")
     st.stop()
 
+df_raw = df_all.copy()
+
 # Guard: ensure columns that may be absent in early/startup logs exist
 for _col in ["feature", "correlation_id", "latency_ms", "cost_usd",
               "tokens_in", "tokens_out", "quality_score"]:
@@ -134,15 +136,6 @@ for _col in ["feature", "correlation_id", "latency_ms", "cost_usd",
 
 # Normalise: rows without feature (startup logs, etc.) → label as "system"
 df_raw["feature"] = df_raw["feature"].fillna("system")
-
-# --- SIDEBAR ---
-st.sidebar.title("OpsVision Enterprise")
-st.sidebar.markdown("---")
-refresh = st.sidebar.button("🔄 Refresh Data")
-if refresh:
-    st.cache_data.clear()
-
-st.sidebar.info(f"Showing {len(df_raw)} of {len(df_all)} records")
 
 # --- APP LAYOUT ---
 tab1, tab2, tab3 = st.tabs(["🏛️ Layer 1: Executive Overview", "⚙️ Layer 2: Engineering Detail", "🔍 Layer 3: Debug Investigation"])
@@ -333,10 +326,8 @@ with tab2:
             y=alt.Y('feature:N', sort='-x'),
             color='feature:N'
         )
-        st.altair_chart(q_chart, use_container_width=True)
-        st.caption("Quality score calculated from latency, docs availability, and answer length.")
-    else:
-        st.warning("Quality data not found in logs. Check if main.py is updated to log quality_score.")
+        st.altair_chart(f_chart, use_container_width=True)
+        st.caption("Feature distribution across all requests.")
 
 # --- LAYER 3: DEBUG ---
 with tab3:
