@@ -1,5 +1,5 @@
 {
-  "rag_slow": "Retrieval latency spike. Students should find slow RAG span in trace.",
-  "tool_fail": "Vector store or tool error. Students should identify error_type from logs.",
-  "cost_spike": "Token usage spike. Students should explain higher output token cost."
+  "rag_slow": "RAG retrieval chậm do vector database overload. Sinh viên chờ > 5s để nhận câu trả lời. Dashboard Panel 1 (Latency) sẽ hiển thị P95 > 5000ms. Trace Langfuse sẽ cho thấy RAG span chiếm 80%+ tổng thời gian.",
+  "tool_fail": "LLM API timeout hoặc trả về lỗi. Sinh viên nhận error response. Dashboard Panel 3 (Errors) sẽ hiển thị error_rate > 5%. Logs sẽ có error_type = 'llm_timeout'.",
+  "cost_spike": "Token usage tăng đột biến do prompts quá dài hoặc model đắt tiền. Dashboard Panel 4 (Cost) sẽ hiển thị hourly_cost > 2x baseline. Trace sẽ cho thấy tokens_in > 8000 per request."
 }

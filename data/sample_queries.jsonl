@@ -1,10 +1,15 @@
-{"user_id":"u01","session_id":"s01","feature":"qa","message":"What is your refund policy? My email is student@vinuni.edu.vn"}
-{"user_id":"u02","session_id":"s02","feature":"qa","message":"Explain why metrics traces and logs work together"}
-{"user_id":"u03","session_id":"s03","feature":"summary","message":"Summarize the monitoring policy for production logging"}
-{"user_id":"u04","session_id":"s04","feature":"qa","message":"Can I get help with policy and monitoring?"}
-{"user_id":"u05","session_id":"s05","feature":"qa","message":"Here is my phone 0987654321, what should be logged?"}
-{"user_id":"u06","session_id":"s06","feature":"summary","message":"Give me a short summary of the observability workflow"}
-{"user_id":"u07","session_id":"s07","feature":"qa","message":"What should not appear in app logs?"}
-{"user_id":"u08","session_id":"s08","feature":"qa","message":"How do I debug tail latency?"}
-{"user_id":"u09","session_id":"s09","feature":"qa","message":"What is the policy for PII and credit card 4111 1111 1111 1111?"}
-{"user_id":"u10","session_id":"s10","feature":"qa","message":"How should alerts be designed?"}
+{"user_id":"u01","session_id":"s01","feature":"qa","message":"Visa du học Mỹ cần những giấy tờ gì? Email liên hệ của tôi là student@vinuni.edu.vn"}
+{"user_id":"u02","session_id":"s02","feature":"summary","message":"Tóm tắt yêu cầu học bổng toàn phần Chevening UK cho thạc sĩ"}
+{"user_id":"u03","session_id":"s03","feature":"visa_check","message":"Kiểm tra danh sách giấy tờ visa du học Hàn Quốc D-2"}
+{"user_id":"u04","session_id":"s04","feature":"qa","message":"Học bổng chính phủ Nhật Bản MEXT có yêu cầu IELTS không? SĐT: 0987654321"}
+{"user_id":"u05","session_id":"s05","feature":"document_review","message":"Review SOP này cho chương trình Computer Science tại ETH Zurich"}
+{"user_id":"u06","session_id":"s06","feature":"qa","message":"Chi phí sinh hoạt hàng tháng tại Singapore cho du học sinh?"}
+{"user_id":"u07","session_id":"s07","feature":"summary","message":"Tổng hợp các bước xin visa du học Úc subclass 500"}
+{"user_id":"u08","session_id":"s08","feature":"qa","message":"Yêu cầu IELTS cho đại học top 50 tại Mỹ là bao nhiêu?"}
+{"user_id":"u09","session_id":"s09","feature":"visa_check","message":"Visa F-1 Mỹ cần chứng minh tài chính bao nhiêu? CCCD: 012345678901"}
+{"user_id":"u10","session_id":"s10","feature":"qa","message":"Thời gian xử lý hồ sơ visa Canada diện SDS bao lâu?"}
+{"user_id":"u11","session_id":"s11","feature":"document_review","message":"Kiểm tra thư giới thiệu này có đủ mạnh cho Harvard không"}
+{"user_id":"u12","session_id":"s12","feature":"qa","message":"Credit card 4111 1111 1111 1111 có được chấp nhận để đóng phí visa không?"}
+{"user_id":"u13","session_id":"s13","feature":"summary","message":"Tóm tắt quy trình công nhận bằng cấp tại Đức cho sinh viên Việt Nam"}
+{"user_id":"u14","session_id":"s14","feature":"qa","message":"Bảo hiểm y tế bắt buộc khi du học Pháp là loại nào?"}
+{"user_id":"u15","session_id":"s15","feature":"visa_check","message":"Yêu cầu health insurance cho visa du học New Zealand?"}
