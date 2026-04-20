@@ -5,7 +5,7 @@
 - One full trace waterfall
 - JSON logs showing correlation_id
 - Log line with PII redaction
-- Dashboard with 6 panels
+- Dashboard with 7 panels (Latency, Traffic, Errors, Cost, Tokens, Quality, Security)
 - Alert rules with runbook link
 
 ## Optional screenshots
