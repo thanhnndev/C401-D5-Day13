@@ -126,18 +126,21 @@ if df_all.empty:
     st.error("No logs found. Ensure the system is running and generating logs.")
     st.stop()
 
-# Apply Time Filter
-now = datetime.now(df_all['ts'].dt.tz)
-if time_range == "Last 15 Minutes":
-    df_raw = df_all[df_all['ts'] > now - timedelta(minutes=15)]
-elif time_range == "Last 1 Hour":
-    df_raw = df_all[df_all['ts'] > now - timedelta(hours=1)]
-elif time_range == "Last 3 Hours":
-    df_raw = df_all[df_all['ts'] > now - timedelta(hours=3)]
-elif time_range == "Last 24 Hours":
-    df_raw = df_all[df_all['ts'] > now - timedelta(hours=24)]
-else:
-    df_raw = df_all
+# Guard: ensure columns that may be absent in early/startup logs exist
+for _col in ["feature", "correlation_id", "latency_ms", "cost_usd",
+              "tokens_in", "tokens_out", "quality_score"]:
+    if _col not in df_raw.columns:
+        df_raw[_col] = None
+
+# Normalise: rows without feature (startup logs, etc.) → label as "system"
+df_raw["feature"] = df_raw["feature"].fillna("system")
+
+# --- SIDEBAR ---
+st.sidebar.title("OpsVision Enterprise")
+st.sidebar.markdown("---")
+refresh = st.sidebar.button("🔄 Refresh Data")
+if refresh:
+    st.cache_data.clear()
 
 st.sidebar.info(f"Showing {len(df_raw)} of {len(df_all)} records")
 
@@ -312,14 +315,23 @@ with tab2:
             st.info("Token data unavailable.")
 
     st.divider()
-    
-    # 6. QUALITY PROXY
-    st.subheader("6. Quality Proxy (Heuristic Trend)")
-    if 'quality_score' in df_raw.columns:
-        qual_trend = df_raw.set_index('ts').resample('1min')['quality_score'].mean().reset_index()
-        q_chart = alt.Chart(qual_trend).mark_line(color='#8B5CF6', point=True).encode(
-            x=alt.X('ts:T', title="Time"),
-            y=alt.Y('quality_score:Q', title="Quality Score", scale=alt.Scale(domain=[0, 1]))
+    st.subheader("Cost & Quality Metrics")
+    q1, q2 = st.columns(2)
+    with q1:
+        if 'cost_usd' in df_raw.columns:
+            cost_by_feature = df_raw.groupby('feature')['cost_usd'].sum().reset_index()
+            c_pie = alt.Chart(cost_by_feature).mark_arc().encode(
+                theta='cost_usd:Q',
+                color='feature:N',
+                tooltip=['feature', 'cost_usd']
+            )
+            st.altair_chart(c_pie, use_container_width=True)
+    with q2:
+        feature_dist = df_raw['feature'].value_counts().rename_axis('feature').reset_index(name='count')
+        f_chart = alt.Chart(feature_dist).mark_bar().encode(
+            x='count:Q',
+            y=alt.Y('feature:N', sort='-x'),
+            color='feature:N'
         )
         st.altair_chart(q_chart, use_container_width=True)
         st.caption("Quality score calculated from latency, docs availability, and answer length.")
@@ -334,9 +346,11 @@ with tab3:
     
     filter_col1, filter_col2 = st.columns(2)
     with filter_col1:
-        f_level = st.multiselect("Filter Level", df_raw['level'].unique(), default=df_raw['level'].unique())
+        level_opts = sorted(df_raw['level'].dropna().unique())
+        f_level = st.multiselect("Filter Level", level_opts, default=level_opts)
     with filter_col2:
-        f_feat = st.multiselect("Filter Feature", df_raw['feature'].unique() if not df_raw.empty else [], default=df_raw['feature'].unique() if not df_raw.empty else [])
+        feat_opts = sorted(df_raw['feature'].dropna().unique())
+        f_feat = st.multiselect("Filter Feature", feat_opts, default=feat_opts)
     
     df_debug = df_raw[(df_raw['level'].isin(f_level)) & (df_raw['feature'].isin(f_feat))]
     
@@ -357,14 +371,19 @@ with tab3:
     
     st.divider()
     st.subheader("Correlation Explorer")
-    cid = st.selectbox("Select Correlation ID to trace flow", [""] + list(df_raw['correlation_id'].unique() if not df_raw.empty else []))
+    cid_options = [""] + sorted([c for c in df_raw['correlation_id'].dropna().unique() if c])
+    cid = st.selectbox("Select Correlation ID to trace flow", cid_options)
     
     if cid:
         flow = df_raw[df_raw['correlation_id'] == cid].sort_values('ts')
         for idx, row in flow.iterrows():
             with st.container():
                 st.markdown(f"**[{row['ts'].strftime('%H:%M:%S.%f')[:-3]}]** `{row['event']}` | Level: `{row['level']}`")
-                st.json(row['payload'])
+                payload = row.get('payload') or {}
+                if isinstance(payload, dict):
+                    st.json(payload)
+                else:
+                    st.code(str(payload))
 
 # --- FOOTER ---
 st.markdown("---")
