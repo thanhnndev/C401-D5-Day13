@@ -4,22 +4,51 @@ import os
 from typing import Any
 
 try:
-    from langfuse.decorators import observe, langfuse_context
+    from langfuse import Langfuse
+
+    _langfuse_client: Langfuse | None = Langfuse(
+        public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
+        secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
+        base_url=os.getenv("LANGFUSE_BASE_URL", "http://localhost:27100"),
+    )
 except Exception:  # pragma: no cover
-    def observe(*args: Any, **kwargs: Any):
-        def decorator(func):
-            return func
-        return decorator
+    _langfuse_client = None
 
-    class _DummyContext:
-        def update_current_trace(self, **kwargs: Any) -> None:
-            return None
+    class _DummyLangfuse:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+        def auth_check(self) -> bool:
+            return False
+        def flush(self) -> None:
+            pass
+        def shutdown(self) -> None:
+            pass
+        def start_as_current_observation(self, *args: Any, **kwargs: Any):
+            return _DummySpan()
+        def update_current_trace(self, *args: Any, **kwargs: Any) -> None:
+            pass
 
-        def update_current_observation(self, **kwargs: Any) -> None:
-            return None
+    class _DummySpan:
+        def __enter__(self):
+            return self
+        def __exit__(self, *args):
+            pass
+        def start_as_current_observation(self, *args: Any, **kwargs: Any):
+            return _DummySpan()
+        def update(self, *args: Any, **kwargs: Any) -> None:
+            pass
 
-    langfuse_context = _DummyContext()
+    Langfuse = _DummyLangfuse  # type: ignore
+
+
+def get_langfuse_client() -> Langfuse | None:
+    return _langfuse_client
 
 
 def tracing_enabled() -> bool:
-    return bool(os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"))
+    if _langfuse_client is None:
+        return False
+    try:
+        return _langfuse_client.auth_check()
+    except Exception:
+        return False
