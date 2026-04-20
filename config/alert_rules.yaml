@@ -5,15 +5,149 @@ alerts:
     type: symptom-based
     owner: team-oncall
     runbook: docs/alerts.md#1-high-latency-p95
+    dashboard_panel: latency
+    impact: "Sinh viên chờ > 5s, tỷ lệ bỏ cuộc cao"
+    first_checks:
+      - "Mở top slow traces trong 1h qua"
+      - "So sánh RAG span vs LLM span"
+      - "Kiểm tra incident toggle rag_slow có bật không"
+    mitigation:
+      - "Truncate queries dài > 500 từ"
+      - "Fallback retrieval source"
+      - "Giảm prompt size"
+
   - name: high_error_rate
     severity: P1
     condition: error_rate_pct > 5 for 5m
     type: symptom-based
     owner: team-oncall
     runbook: docs/alerts.md#2-high-error-rate
+    dashboard_panel: errors
+    impact: "Sinh viên nhận lỗi, không có câu trả lời"
+    first_checks:
+      - "Group logs by error_type"
+      - "Inspect failed traces"
+      - "Xác định lỗi từ LLM, RAG, hay schema validation"
+    mitigation:
+      - "Rollback thay đổi gần nhất"
+      - "Disable tool bị lỗi"
+      - "Retry với fallback model"
+
   - name: cost_budget_spike
     severity: P2
     condition: hourly_cost_usd > 2x_baseline for 15m
     type: symptom-based
     owner: finops-owner
     runbook: docs/alerts.md#3-cost-budget-spike
+    dashboard_panel: cost
+    impact: "Chi phí vượt ngân sách $2.5/ngày"
+    first_checks:
+      - "Split traces by feature và model"
+      - "So sánh tokens_in/tokens_out"
+      - "Kiểm tra cost_spike incident có bật không"
+    mitigation:
+      - "Shorten prompts"
+      - "Route easy requests sang model rẻ hơn"
+      - "Apply prompt cache"
+
+  - name: low_quality_score
+    severity: P2
+    condition: quality_score_avg < 0.5 for 15m
+    type: quality-based
+    owner: ai-quality-owner
+    runbook: docs/alerts.md#4-low-quality-score
+    dashboard_panel: quality
+    impact: "Câu trả lời không hữu ích, sinh viên không hài lòng"
+    first_checks:
+      - "Kiểm tra rag_docs_count trong traces"
+      - "Xem sample answers có bị [REDACTED] không"
+      - "So sánh quality_score theo feature"
+    mitigation:
+      - "Expand RAG knowledge base"
+      - "Improve retrieval relevance"
+      - "Add prompt templates per feature"
+
+  - name: high_regenerate_rate
+    severity: P3
+    condition: regenerate_rate > 30 for 10m
+    type: quality-based
+    owner: ai-quality-owner
+    runbook: docs/alerts.md#5-high-regenerate-rate
+    dashboard_panel: quality
+    impact: "Sinh viên phải hỏi lại nhiều lần"
+    first_checks:
+      - "Nhóm sessions có regenerate > 2 lần"
+      - "Phân tích common patterns trong failed queries"
+      - "Kiểm tra empty_rag_rate"
+    mitigation:
+      - "Improve query understanding"
+      - "Add clarification prompts"
+      - "Expand document coverage"
+
+  - name: pii_leak_detected
+    severity: P1
+    condition: pii_leak_count > 0 for 1m
+    type: security
+    owner: security-owner
+    runbook: docs/alerts.md#6-pii-leak-detected
+    dashboard_panel: security
+    impact: "Dữ liệu nhạy cảm của sinh viên bị lộ trong logs (email, SĐT, CCCD, credit card)"
+    first_checks:
+      - "Kiểm tra log lines có PII không bị redact"
+      - "Xác định source: input validation hay output scrubbing"
+      - "Review PII patterns trong pii.py"
+    mitigation:
+      - "Enable strict PII scrubbing mode"
+      - "Block request chứa PII chưa được hash"
+      - "Audit toàn bộ logs trong 24h qua"
+
+  - name: prompt_injection_detected
+    severity: P1
+    condition: prompt_injection_count > 0 for 5m
+    type: security
+    owner: security-owner
+    runbook: docs/alerts.md#7-prompt-injection-detected
+    dashboard_panel: security
+    impact: "Sinh viên cố gắng bypass system prompt, truy cập thông tin nhạy cảm hoặc thao tác hệ thống"
+    first_checks:
+      - "Inspect traces có prompt_injection tag"
+      - "Phân tích pattern injection attempts"
+      - "Kiểm tra system prompt có bị leak không"
+    mitigation:
+      - "Add input validation rules"
+      - "Strengthen system prompt guardrails"
+      - "Block suspicious user sessions"
+
+  - name: unauthorized_access_attempt
+    severity: P1
+    condition: auth_failure_count > 10 for 5m
+    type: security
+    owner: security-owner
+    runbook: docs/alerts.md#8-unauthorized-access
+    dashboard_panel: security
+    impact: "Brute force attack hoặc truy cập trái phép vào hệ thống"
+    first_checks:
+      - "Group auth failures by IP và user_id"
+      - "Kiểm tra có pattern automated attack không"
+      - "Review access logs cho suspicious activity"
+    mitigation:
+      - "Rate limit API endpoints"
+      - "Block suspicious IPs"
+      - "Enable CAPTCHA cho login"
+
+  - name: data_exfiltration_risk
+    severity: P1
+    condition: tokens_out_per_request > 10000 for 3 requests
+    type: security
+    owner: security-owner
+    runbook: docs/alerts.md#9-data-exfiltration-risk
+    dashboard_panel: security
+    impact: "AI có thể đang leak toàn bộ knowledge base hoặc dữ liệu nhạy cảm qua responses quá dài"
+    first_checks:
+      - "Inspect traces với tokens_out > 10000"
+      - "Kiểm tra response content có chứa raw documents không"
+      - "Xem có pattern scraping không"
+    mitigation:
+      - "Set max_tokens limit cho responses"
+      - "Add output validation"
+      - "Implement response length guardrails"

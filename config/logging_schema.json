@@ -17,8 +17,10 @@
     "tokens_in": {"type": ["integer", "null"]},
     "tokens_out": {"type": ["integer", "null"]},
     "cost_usd": {"type": ["number", "null"]},
+    "quality_score": {"type": ["number", "null"]},
     "error_type": {"type": ["string", "null"]},
     "tool_name": {"type": ["string", "null"]},
+    "rag_docs_count": {"type": ["integer", "null"]},
     "payload": {"type": ["object", "null"]}
   }
 }
