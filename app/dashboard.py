@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import json
 import os
+import time
 from datetime import datetime, timedelta
 import altair as alt
 
@@ -44,17 +45,36 @@ st.markdown("""
         font-weight: bold;
         text-align: center;
         display: inline-block;
+        margin-bottom: 20px;
     }
     .status-up { background-color: #059669; color: white; }
     .status-warn { background-color: #D97706; color: white; }
     .status-down { background-color: #DC2626; color: white; }
+    
+    /* Premium accents */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 24px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        background-color: transparent;
+        border-radius: 4px 4px 0 0;
+        gap: 1px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #1E293B;
+        border-bottom: 2px solid #3B82F6 !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
 # --- DATA LOADING ---
 LOG_FILE = "data/logs.jsonl"
 
-@st.cache_data(ttl=30)
+@st.cache_data(ttl=15)
 def load_data():
     if not os.path.exists(LOG_FILE):
         return pd.DataFrame()
@@ -73,10 +93,36 @@ def load_data():
         df = df.sort_values('ts', ascending=False)
     return df
 
-# --- PROCESSING ---
-df_raw = load_data()
+# --- SIDEBAR & FILTERS ---
+st.sidebar.title("OpsVision Enterprise")
+st.sidebar.markdown("---")
 
-if df_raw.empty:
+# Auto-refresh
+auto_refresh = st.sidebar.checkbox("🔄 Auto-refresh (30s)", value=True)
+if auto_refresh:
+    st.components.v1.html(
+        """
+        <script>
+        setTimeout(function(){
+            window.parent.location.reload();
+        }, 30000);
+        </script>
+        """,
+        height=0
+    )
+    st.sidebar.caption("Next refresh in 30s")
+
+# Time Range Filter
+time_range = st.sidebar.selectbox(
+    "⏳ Time Range",
+    options=["Last 15 Minutes", "Last 1 Hour", "Last 3 Hours", "Last 24 Hours", "All Time"],
+    index=1 # Default to 1 Hour
+)
+
+# --- PROCESSING ---
+df_all = load_data()
+
+if df_all.empty:
     st.error("No logs found. Ensure the system is running and generating logs.")
     st.stop()
 
@@ -96,7 +142,7 @@ refresh = st.sidebar.button("🔄 Refresh Data")
 if refresh:
     st.cache_data.clear()
 
-st.sidebar.info(f"Loaded {len(df_raw)} records")
+st.sidebar.info(f"Showing {len(df_raw)} of {len(df_all)} records")
 
 # --- APP LAYOUT ---
 tab1, tab2, tab3 = st.tabs(["🏛️ Layer 1: Executive Overview", "⚙️ Layer 2: Engineering Detail", "🔍 Layer 3: Debug Investigation"])
@@ -106,7 +152,10 @@ with tab1:
     st.header("Global System Health")
     
     # Health Calculation
-    error_rate = (len(df_raw[df_raw['level'] == 'error']) / len(df_raw)) * 100
+    total_reqs = len(df_raw)
+    error_count = len(df_raw[df_raw['level'] == 'error'])
+    error_rate = (error_count / total_reqs) * 100 if total_reqs > 0 else 0
+    
     if error_rate < 1:
         status_class = "status-up"
         status_text = "HEALTHY"
@@ -123,18 +172,21 @@ with tab1:
     
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        st.metric("Total Requests", f"{len(df_raw):,}")
+        st.metric("Total Requests", f"{total_reqs:,}")
     with c2:
-        uptime_min = (df_raw['ts'].max() - df_raw['ts'].min()).total_seconds() / 60
-        st.metric("Session Uptime", f"{uptime_min:.1f}m")
+        if not df_raw.empty and 'latency_ms' in df_raw.columns:
+            p99_latency = df_raw['latency_ms'].quantile(0.99)
+            st.metric("P99 Latency", f"{p99_latency:.0f}ms", delta=f"{p99_latency-500:.0f}ms" if p99_latency > 500 else None, delta_color="inverse")
+        else:
+            st.metric("P99 Latency", "0ms")
     with c3:
         total_cost = df_raw['cost_usd'].sum() if 'cost_usd' in df_raw.columns else 0.0
-        st.metric("Total API Cost", f"${total_cost:.4f}")
+        st.metric("Total Cost", f"${total_cost:.4f}")
     with c4:
-        avg_latency = df_raw['latency_ms'].mean() if 'latency_ms' in df_raw.columns else 0
-        st.metric("Avg Latency", f"{avg_latency:.1f}ms")
+        avg_quality = df_raw['quality_score'].mean() if 'quality_score' in df_raw.columns else 0
+        st.metric("Avg Quality", f"{avg_quality:.2f}/1.0")
 
-    st.subheader("Business Impact & Usage")
+    st.subheader("Traffic Velocity")
     usage_chart = alt.Chart(df_raw).mark_area(
         line={'color':'#3B82F6'},
         color=alt.Gradient(
@@ -144,8 +196,8 @@ with tab1:
             x1=1, x2=1, y1=1, y2=0
         )
     ).encode(
-        x='ts:T',
-        y='count():Q',
+        x=alt.X('ts:T', title="Time"),
+        y=alt.Y('count():Q', title="Request Count"),
     ).properties(height=300)
     st.altair_chart(usage_chart, use_container_width=True)
 
@@ -157,58 +209,110 @@ with tab2:
     LATENCY_SLO = 500
     ERROR_SLO = 5.0
     
+    # 1. LATENCY (P50, P95, P99)
+    st.subheader("1. Latency Distribution (P50/P95/P99)")
+    if 'latency_ms' in df_raw.columns and not df_raw.empty:
+        # Prepare percentile data
+        df_lat = df_raw[df_raw['latency_ms'].notnull()].copy()
+        df_lat = df_lat.set_index('ts').resample('1min')['latency_ms'].agg(['median', lambda x: x.quantile(0.95), lambda x: x.quantile(0.99)]).reset_index()
+        df_lat.columns = ['ts', 'P50', 'P95', 'P99']
+        
+        # Melt for plotting
+        df_lat_melted = df_lat.melt('ts', var_name='Metric', value_name='ms')
+        
+        l_chart = alt.Chart(df_lat_melted).mark_line().encode(
+            x=alt.X('ts:T', title="Time"),
+            y=alt.Y('ms:Q', title="Latency (ms)"),
+            color=alt.Color('Metric:N', scale=alt.Scale(range=['#60A5FA', '#3B82F6', '#2563EB']))
+        ).properties(height=300)
+        
+        slo_line = alt.Chart(pd.DataFrame({'y': [LATENCY_SLO]})).mark_rule(color='#EF4444', strokeDash=[5,5]).encode(y='y:Q')
+        st.altair_chart(l_chart + slo_line, use_container_width=True)
+        st.caption(f"Red dashed line: SLO Threshold ({LATENCY_SLO}ms)")
+    else:
+        st.info("Insufficient latency data for the selected window.")
+
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("1. Latency (P95)")
-        if 'latency_ms' in df_raw.columns:
-            # Latency Chart with SLO line
-            l_chart = alt.Chart(df_raw[df_raw['latency_ms'].notnull()]).mark_line(color='#3B82F6').encode(
-                x='ts:T',
-                y=alt.Y('latency_ms:Q', title="Latency (ms)")
+        # 2. TRAFFIC (QPS)
+        st.subheader("2. Traffic (Throughput & QPS)")
+        if not df_raw.empty:
+            df_qps = df_raw.set_index('ts').resample('1s').size().reset_index()
+            df_qps.columns = ['ts', 'requests']
+            # Smooth QPS with rolling average
+            df_qps['qps'] = df_qps['requests'].rolling(window=5).mean()
+            
+            t_chart = alt.Chart(df_qps).mark_line(color='#10B981').encode(
+                x=alt.X('ts:T', title="Time"),
+                y=alt.Y('qps:Q', title="QPS (smoothed)")
             )
-            slo_line = alt.Chart(pd.DataFrame({'y': [LATENCY_SLO]})).mark_rule(color='red', strokeDash=[5,5]).encode(y='y:Q')
-            st.altair_chart(l_chart + slo_line, use_container_width=True)
-            st.caption(f"Red dashed line: SLO Threshold ({LATENCY_SLO}ms)")
+            st.altair_chart(t_chart, use_container_width=True)
+            st.caption("Requests Per Second (smoothed over 5s)")
     
     with col2:
-        st.subheader("2. Traffic (Throughput)")
-        t_chart = alt.Chart(df_raw).mark_bar(color='#60A5FA').encode(
-            x=alt.X('ts:T', bin=alt.Bin(maxbins=30)),
-            y='count():Q'
-        )
-        st.altair_chart(t_chart, use_container_width=True)
-
-    col3, col4 = st.columns(2)
-    
-    with col3:
-        st.subheader("3. Errors (Rate %)")
-        # Calculate hourly error rate
+        # 3. ERROR RATE & BREAKDOWN
+        st.subheader("3. Error Rate & Breakdown")
         err_df = df_raw.copy()
         err_df['is_error'] = err_df['level'] == 'error'
         err_trend = err_df.set_index('ts').resample('1min')['is_error'].mean() * 100
         err_trend = err_trend.reset_index()
         
         e_chart = alt.Chart(err_trend).mark_line(color='#EF4444').encode(
-            x='ts:T',
+            x=alt.X('ts:T', title="Time"),
             y=alt.Y('is_error:Q', title="Error Rate (%)")
         )
-        slo_err_line = alt.Chart(pd.DataFrame({'y': [ERROR_SLO]})).mark_rule(color='red', strokeDash=[5,5]).encode(y='y:Q')
+        slo_err_line = alt.Chart(pd.DataFrame({'y': [ERROR_SLO]})).mark_rule(color='#EF4444', strokeDash=[5,5]).encode(y='y:Q')
         st.altair_chart(e_chart + slo_err_line, use_container_width=True)
-        st.caption(f"Red dashed line: Error Budget ({ERROR_SLO}%)")
+        
+        # Error Breakdown by Feature
+        if error_count > 0:
+            err_breakdown = df_raw[df_raw['level'] == 'error'].groupby('feature').size().reset_index(name='count')
+            eb_chart = alt.Chart(err_breakdown).mark_bar(color='#EF4444').encode(
+                x='count:Q',
+                y=alt.Y('feature:N', sort='-x')
+            ).properties(height=100)
+            st.altair_chart(eb_chart, use_container_width=True)
+
+    st.divider()
+    
+    col3, col4 = st.columns(2)
+    
+    with col3:
+        # 4. COST OVER TIME
+        st.subheader("4. Cost Trend (USD)")
+        if 'cost_usd' in df_raw.columns:
+            cost_trend = df_raw.set_index('ts').resample('1min')['cost_usd'].sum().reset_index()
+            c_chart = alt.Chart(cost_trend).mark_area(
+                color=alt.Gradient(
+                    gradient='linear',
+                    stops=[alt.GradientStop(color='#F59E0B', offset=0),
+                           alt.GradientStop(color='rgba(245, 158, 11, 0.1)', offset=1)],
+                    x1=1, x2=1, y1=1, y2=0
+                )
+            ).encode(
+                x=alt.X('ts:T', title="Time"),
+                y=alt.Y('cost_usd:Q', title="Cost (USD)")
+            )
+            st.altair_chart(c_chart, use_container_width=True)
+        else:
+            st.info("Cost data unavailable.")
 
     with col4:
-        st.subheader("4. Saturation & Efficiency")
+        # 5. TOKENS IN/OUT
+        st.subheader("5. Token Throughput")
         if 'tokens_in' in df_raw.columns:
-            token_chart = alt.Chart(df_raw).mark_circle(color='#F97316').encode(
-                x='tokens_in:Q',
-                y='tokens_out:Q',
-                size='latency_ms:Q',
-                tooltip=['correlation_id', 'tokens_in', 'tokens_out', 'latency_ms']
+            token_trend = df_raw.set_index('ts').resample('1min')[['tokens_in', 'tokens_out']].sum().reset_index()
+            token_melted = token_trend.melt('ts', var_name='Type', value_name='count')
+            
+            tk_chart = alt.Chart(token_melted).mark_line().encode(
+                x=alt.X('ts:T', title="Time"),
+                y=alt.Y('count:Q', title="Tokens"),
+                color=alt.Color('Type:N', scale=alt.Scale(range=['#F97316', '#FB923C']))
             )
-            st.altair_chart(token_chart, use_container_width=True)
+            st.altair_chart(tk_chart, use_container_width=True)
         else:
-            st.info("Saturation data (tokens) requires load test.")
+            st.info("Token data unavailable.")
 
     st.divider()
     st.subheader("Cost & Quality Metrics")
@@ -229,7 +333,10 @@ with tab2:
             y=alt.Y('feature:N', sort='-x'),
             color='feature:N'
         )
-        st.altair_chart(f_chart, use_container_width=True)
+        st.altair_chart(q_chart, use_container_width=True)
+        st.caption("Quality score calculated from latency, docs availability, and answer length.")
+    else:
+        st.warning("Quality data not found in logs. Check if main.py is updated to log quality_score.")
 
 # --- LAYER 3: DEBUG ---
 with tab3:
@@ -256,6 +363,7 @@ with tab3:
             "ts": st.column_config.DatetimeColumn("Time", format="HH:mm:ss.SSS"),
             "payload": st.column_config.JsonColumn("Payload"),
             "cost_usd": st.column_config.NumberColumn("Cost", format="$%.4f"),
+            "quality_score": st.column_config.NumberColumn("Quality", format="%.2f"),
         },
         use_container_width=True,
         hide_index=True
