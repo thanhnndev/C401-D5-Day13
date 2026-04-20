@@ -73,7 +73,21 @@
   - Tối ưu hóa UI/UX: Trải qua nhiều phiên bản tinh chỉnh bố cục (Layout) để tạo ra giao diện phân cấp thông tin rõ ràng (Executive Overview -> Performance Metrics -> Debug Details).
 - [EVIDENCE_LINK]: "app/dashboard.py" | "evidence/"
 
-### [MEMBER_B_NAME]
+### [Nông Nguyễn Thành - 2A202600250] - Vai trò: Full-Stack Observability
+
+- [TASKS_COMPLETED]:
+  - Cấu hình structlog pipeline với 7 processors, PII scrubbing trước khi ghi JSONL, correlation ID middleware (req-{hex8}).
+  - Thiết kế 7 PII patterns (email, phone_vn, cccd, credit_card, passport, visa_number, address_keyword) với regex và scrubbing.
+  - Tích hợp Langfuse client với 6-span trace hierarchy (agent-run, pii-scan, injection-scan, rag-retrieval, llm-call, response-validation, cost-calculation).
+  - Triển khai 5 quality scores (quality, relevance, completeness, safety, overall) với weighted scoring và Langfuse `span.score()`.
+  - Xây dựng 9 alert rules (5 standard + 4 security) với Vietnamese runbook chi tiết.
+  - Phát triển 7-panel dashboard (Streamlit + Altair) với 3-layer design (Executive → Engineering → Debug).
+  - Cấu hình Docker Compose 6 containers (Langfuse stack) với custom ports 27xxx.
+  - Tích hợp LM Studio native API + Real LLM (DashScope/Qwen) với MODEL_PRICING table (16 models).
+  - Xử lý merge conflict resolution cho 7 files, viết load test và dashboard validation scripts.
+- [EVIDENCE_LINK]: "docs/reports/2A202600250_NongNguyenThanh_individual_report.md" | "app/agent.py" | "app/tracing.py" | "app/metrics.py" | "app/mock_llm.py" | "config/alert_rules.yaml" | "docker-compose.yml"
+
+### [MEMBER_C_NAME]
 
 - [TASKS_COMPLETED]:
 - [EVIDENCE_LINK]:
